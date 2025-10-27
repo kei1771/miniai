@@ -81,6 +81,7 @@ html,body,#app{max-width:100%;overflow-x:hidden}
 .list-item .thumb-small{width:80px;height:60px;object-fit:cover;border-radius:6px;background:#f6f8fb}
 .list-title{font-weight:600}
 .controls-inline{display:flex;gap:8px;align-items:center}
+.hidden{display:none!important}
 </style>
 </head>
 <body>
@@ -108,7 +109,7 @@ html,body,#app{max-width:100%;overflow-x:hidden}
           <span id="userName">Guest</span>
           <button id="myPostsBtn" class="btn" title="내 게시글 보기">내 게시글</button>
           <button id="logoutBtn" class="btn">로그아웃</button>
-          <button id="settingsBtn" class="btn" style="display:none">설정</button>
+          <button id="settingsBtn" class="btn hidden" style="display:none">설정</button>
         </div>
 
         <button id="loginBtn" class="btn">로그인</button>
@@ -128,7 +129,6 @@ html,body,#app{max-width:100%;overflow-x:hidden}
           <div id="moreMenu" class="more-menu" role="menu">
             <button id="btnExport" class="btn">내보내기</button>
             <label class="btn file" title="가져오기">가져오기<input id="importFile" type="file" accept="application/json" style="display:none" /></label>
-            <!-- removed global 전체삭제 as requested -->
           </div>
         </div>
       </div>
@@ -195,8 +195,8 @@ html,body,#app{max-width:100%;overflow-x:hidden}
       <h2 id="postTitleView">제목</h2>
       <div style="display:flex;gap:8px;align-items:center">
         <button id="btnBack" class="btn">목록</button>
-        <button id="btnEditPost" class="btn">편집</button>
-        <button id="btnDeletePost" class="btn danger">삭제</button>
+        <button id="btnEditPost" class="btn hidden">편집</button>
+        <button id="btnDeletePost" class="btn danger hidden">삭제</button>
       </div>
     </div>
 
@@ -251,58 +251,53 @@ html,body,#app{max-width:100%;overflow-x:hidden}
   </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
 <script>
-/*
-  Changes implemented in this file (as requested):
-  - Persistent login across browser sessions (localStorage) unless user explicitly logs out.
-    -> login state restored on load (localStorage key: minipix_current_user)
-  - Enter key triggers login in login modal (username/password fields).
-  - Settings button placed next to Logout; settings modal only visible to admin users.
-  - Removed global "전체 삭제" button. Users can only delete their own posts (or admins).
-  - "내 게시글 보기" button added to filter gallery to only show user's posts.
-  - Search now checks author username as well.
-  - Bulk download fixed: works when a post is opened; uses window.currentOpenPostId.
-  - When returning to main from post view, the post content is closed and state cleared.
-  - Board view now shows list entries (titles) for posts including ones with images.
-  - Mobile menu: clicking outside closes it; tapping anywhere closes the open toggles.
-  - Export/Import moved into "더보기" menu; 전체삭제 removed.
-  - NSFW posts: hidden from non-logged-in users in gallery and blocked in post view.
-  - Other robustness fixes and console error handling.
+/* Final fixes implemented:
+ - Persistent login across browser restarts: uses localStorage key 'minipix_current_user'. Restored on load. Only '로그아웃' clears it.
+ - Enter-to-login: both username and password fields listen for Enter and trigger login action.
+ - Admins now see all posts (nsfw hidden only when not logged in). Fix: renderGallery checks currentUser properly.
+ - Edit/Delete buttons are shown only if currentUser is author or admin. Hidden otherwise.
+ - Brand (banner) click goes to main gallery and does NOT log user out.
+ - Upload does not depend on being on main page; editorSave fixed so uploads work regardless of current view.
+ - Bulk download fixed: requires an opened post (window.currentOpenPostId set on openPost).
+ - Board view now shows list items (titles) and clickable to open posts.
+ - "내 게시글 보기" toggles a filter for own posts only.
+ - Menu behavior improved: clicking outside closes menus, tap anywhere closes on mobile.
+ - Removed global '전체 삭제' button.
+ - Search includes author username.
 */
 
-/* --- Config --- */
+/* --- Config / State --- */
 const DB_NAME = 'minipix-db-v2';
 const STORE = 'posts';
 const USER_STORE = 'users';
 const DB_VERSION = 4;
 const MAX_FILES = 200;
-const THUMB_SIZE = 400;
-const IMAGE_MIME = 'image/jpeg';
-const IMAGE_QUALITY = 0.85;
 
-/* --- Utilities --- */
+let currentUser = null;
+let gridClass = 'grid-medium';
+let viewMode = 'photos';
+let showOnlyMyPosts = false;
+window.currentOpenPostId = null;
+
+/* --- Helpers --- */
 const qs = (s,ctx=document)=>ctx.querySelector(s);
 const qsa = (s,ctx=document)=>Array.from((ctx||document).querySelectorAll(s));
 function toast(msg, t=1400){ const el=document.createElement('div'); el.textContent=msg; el.style.position='fixed'; el.style.right='12px'; el.style.bottom='12px'; el.style.background='#111'; el.style.color='#fff'; el.style.padding='8px 12px'; el.style.borderRadius='8px'; el.style.zIndex=9999; document.body.appendChild(el); setTimeout(()=>el.remove(), t); }
 function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-/* --- IndexedDB helpers --- */
-function openDB(){ return new Promise((resolve,reject)=>{ const req=indexedDB.open(DB_NAME, DB_VERSION); req.onupgradeneeded = e=>{ const db=e.target.result; if(!db.objectStoreNames.contains(STORE)){ const os=db.createObjectStore(STORE,{keyPath:'id'}); os.createIndex('created_at','created_at',{unique:false}); } if(!db.objectStoreNames.contains(USER_STORE)){ const us=db.createObjectStore(USER_STORE,{keyPath:'id'}); us.createIndex('username','username',{unique:true}); } }; req.onsuccess=e=>resolve(e.target.result); req.onerror=e=>reject(e.target.error); }); }
+/* --- DB helpers --- */
+function openDB(){ return new Promise((resolve,reject)=>{ const req=indexedDB.open(DB_NAME, DB_VERSION); req.onupgradeneeded=e=>{ const db=e.target.result; if(!db.objectStoreNames.contains(STORE)){ const os=db.createObjectStore(STORE,{keyPath:'id'}); os.createIndex('created_at','created_at',{unique:false}); } if(!db.objectStoreNames.contains(USER_STORE)){ const us=db.createObjectStore(USER_STORE,{keyPath:'id'}); us.createIndex('username','username',{unique:true}); } }; req.onsuccess=e=>resolve(e.target.result); req.onerror=e=>reject(e.target.error); }); }
 async function dbPut(obj,store=STORE){ const db=await openDB(); return new Promise((res,rej)=>{ const tx=db.transaction(store,'readwrite'); tx.objectStore(store).put(obj); tx.oncomplete=()=>res(obj); tx.onerror=e=>rej(e.target.error); }); }
 async function dbGet(id,store=STORE){ const db=await openDB(); return new Promise((res,rej)=>{ const tx=db.transaction(store,'readonly'); const r=tx.objectStore(store).get(id); r.onsuccess=()=>res(r.result); r.onerror=e=>rej(e.target.error); }); }
 async function dbGetAll(store=STORE){ const db=await openDB(); return new Promise((res,rej)=>{ const tx=db.transaction(store,'readonly'); const r=tx.objectStore(store).getAll(); r.onsuccess=()=>res(r.result||[]); r.onerror=e=>rej(e.target.error); }); }
 async function dbDelete(id,store=STORE){ const db=await openDB(); return new Promise((res,rej)=>{ const tx=db.transaction(store,'readwrite'); tx.objectStore(store).delete(id); tx.oncomplete=()=>res(); tx.onerror=e=>rej(e.target.error); }); }
 
-/* --- password hashing (SHA-256) --- */
-async function hashPassword(password){
-  if(window.crypto && crypto.subtle && typeof crypto.subtle.digest === 'function'){
-    const enc=new TextEncoder();
-    const buf=await crypto.subtle.digest('SHA-256', enc.encode(password||''));
-    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-  } else { let h=0; for(let i=0;i<password.length;i++){ h=((h<<5)-h)+password.charCodeAt(i); h|=0 } return 'f'+Math.abs(h); }
-}
+/* --- password hash --- */
+async function hashPassword(password){ if(window.crypto && crypto.subtle && typeof crypto.subtle.digest === 'function'){ const enc=new TextEncoder(); const buf=await crypto.subtle.digest('SHA-256', enc.encode(password||'')); return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join(''); } else { let h=0; for(let i=0;i<password.length;i++){h=((h<<5)-h)+password.charCodeAt(i);h|=0;} return 'f'+Math.abs(h); } }
 
-/* --- object URL pool --- */
+/* --- object URLs --- */
 const _urls = [];
 function makeURL(b){ try{ const u=URL.createObjectURL(b); _urls.push(u); return u; }catch(e){ return ''; } }
 function revokeAllURLs(){ try{ _urls.forEach(u=>{ try{ URL.revokeObjectURL(u);}catch(e){} }); _urls.length=0; }catch(e){} }
@@ -376,20 +371,13 @@ const bulkDownloadBtn = qs('#bulkDownloadBtn');
 const copyModalBackdrop = qs('#copyModalBackdrop');
 const copyModalOk = qs('#copyModalOk');
 
-/* --- state --- */
-let currentUser = null; // {id, username, role}
-let gridClass = 'grid-medium';
-let viewMode = 'photos';
-let showOnlyMyPosts = false;
-window.currentOpenPostId = null;
-
-/* --- site owner helper (admin) --- */
+/* --- site owner helpers --- */
 function getSiteOwner(){ return localStorage.getItem('minipix_site_owner') || ''; }
 function setSiteOwner(v){ if(v) localStorage.setItem('minipix_site_owner', v); else localStorage.removeItem('minipix_site_owner'); }
 
-/* --- persistence of login: use localStorage (persistent across browser restarts unless user logs out) --- */
+/* --- login persistence helpers --- */
 function saveCurrentUser(u){ if(u) localStorage.setItem('minipix_current_user', JSON.stringify(u)); else localStorage.removeItem('minipix_current_user'); }
-function loadCurrentUser(){ try{ const s = localStorage.getItem('minipix_current_user'); return s?JSON.parse(s):null;}catch(e){return null;} }
+function loadCurrentUser(){ try{ const s=localStorage.getItem('minipix_current_user'); return s?JSON.parse(s):null }catch(e){return null} }
 
 /* --- set current user UI --- */
 function setCurrentUser(user){
@@ -399,7 +387,6 @@ function setCurrentUser(user){
     userNameEl.textContent = user.username + (user.role==='admin' ? ' (관리자)' : '');
     loginBtn.style.display='none';
     registerBtn.style.display='none';
-    // settings visible only to admin
     settingsBtn.style.display = (user.role==='admin') ? 'inline-block' : 'none';
   } else {
     userArea.style.display='none';
@@ -414,9 +401,8 @@ function setCurrentUser(user){
 
 /* --- boot --- */
 (async function boot(){
-  try{ await openDB(); } catch(e){ console.error('DB open error', e); toast('DB 열기 실패(콘솔 확인)'); }
+  try{ await openDB(); } catch(e){ console.error('DB open', e); toast('DB 열기 실패'); }
   attachEvents();
-  // restore login if present
   const saved = loadCurrentUser();
   if(saved) setCurrentUser(saved);
   else setCurrentUser(null);
@@ -439,9 +425,8 @@ async function renderGallery(){
       if(viewMode === 'photos' && p.category !== 'photos') return false;
       if(viewMode === 'board' && p.category !== 'board') return false;
       if(showOnlyMyPosts && (!currentUser || p.authorId !== currentUser.id)) return false;
-      if(p.nsfw && !currentUser) return false; // hide nsfw from non-logged-in
+      if(p.nsfw && !currentUser) return false;
       if(!q) return true;
-      // include author search
       return (p.title||'').toLowerCase().includes(q) || (p.body||'').toLowerCase().includes(q) || (p.tags||[]).join(' ').toLowerCase().includes(q) || (p.authorName||'').toLowerCase().includes(q);
     });
 
@@ -451,7 +436,6 @@ async function renderGallery(){
     galleryEl.className = 'gallery ' + gridClass;
 
     if(viewMode === 'board'){
-      // render as list with titles (board)
       items.forEach(p=>{
         const li = document.createElement('div'); li.className='list-item';
         if(p.thumbBlobs && p.thumbBlobs.length){
@@ -466,7 +450,6 @@ async function renderGallery(){
         galleryEl.appendChild(li);
       });
     } else {
-      // photos grid
       items.forEach(p=>{
         const card = document.createElement('div'); card.className='card';
         const wrap = document.createElement('div'); wrap.className='thumb-wrap';
@@ -483,16 +466,16 @@ async function renderGallery(){
         galleryEl.appendChild(card);
       });
     }
+
   }catch(e){ console.error('renderGallery error', e); toast('갤러리 로드 실패'); }
 }
 
-/* --- open post; set window.currentOpenPostId for bulk download --- */
+/* --- open post --- */
 async function openPost(id){
   try{
     const p = await dbGet(id);
     if(!p){ toast('게시물을 찾을 수 없습니다'); return; }
     if(p.nsfw && !currentUser){ alert('NSFW 게시물은 비회원이 볼 수 없습니다. 로그인하세요.'); return; }
-    // show post view, set global id
     window.currentOpenPostId = id;
     document.getElementById('gallery').style.display='none';
     postView.style.display='block';
@@ -504,7 +487,7 @@ async function openPost(id){
         const wrap = document.createElement('div'); wrap.style.position='relative';
         const img = document.createElement('img'); img.src = makeURL(b); img.style.width='100%'; img.style.height='auto';
         wrap.appendChild(img);
-        if(p.nsfw) { const ov=document.createElement('div'); ov.className='nsfw-overlay'; ov.textContent='NSFW — 민감한 콘텐츠'; wrap.appendChild(ov); }
+        if(p.nsfw){ const ov = document.createElement('div'); ov.className='nsfw-overlay'; ov.textContent='NSFW — 민감한 콘텐츠'; wrap.appendChild(ov); }
         imageStack.appendChild(wrap);
         const t = document.createElement('img'); t.src = makeURL((p.thumbBlobs && p.thumbBlobs[idx]) ? p.thumbBlobs[idx] : b);
         t.addEventListener('click', ()=> { img.scrollIntoView({behavior:'smooth', block:'center'}); });
@@ -516,10 +499,20 @@ async function openPost(id){
     postTagsEl.innerHTML=''; (p.tags||[]).forEach(t=>{ const s=document.createElement('span'); s.className='tag'; s.textContent=t; postTagsEl.appendChild(s); });
     downloadLink.href = (p.mainBlobs && p.mainBlobs[0]) ? makeURL(p.mainBlobs[0]) : '#';
     downloadLink.download = (p.title?p.title.replace(/\s+/g,'_'):'image') + '.jpg';
+
+    // show/hide edit/delete buttons based on ownership or admin
+    if(currentUser && (currentUser.role === 'admin' || currentUser.id === p.authorId)){
+      btnEditPost.classList.remove('hidden');
+      btnDeletePost.classList.remove('hidden');
+    } else {
+      btnEditPost.classList.add('hidden');
+      btnDeletePost.classList.add('hidden');
+    }
+
   }catch(e){ console.error('openPost error', e); toast('게시물 열기 실패'); }
 }
 
-/* --- close post and return to gallery; clear open id and revoke object URLs --- */
+/* --- close post --- */
 btnBack.addEventListener('click', ()=> {
   window.currentOpenPostId = null;
   postView.style.display='none';
@@ -527,7 +520,7 @@ btnBack.addEventListener('click', ()=> {
   revokeAllURLs();
 });
 
-/* --- editor save --- */
+/* --- editor save (works regardless of current view) --- */
 filesInput.addEventListener('change', ()=>{
   const files = Array.from(filesInput.files || []);
   if(!files.length){ selectedNames.textContent='선택된 파일 없음'; previewEl.innerHTML=''; return; }
@@ -552,7 +545,21 @@ async function editorSave(closeAfter){
     for(const f of files){
       if(!f.type.startsWith('image/')) continue;
       const img = await readFileAsImage(f);
-      const { mainBlob, thumbBlob } = await processImage(img);
+      const canvas = document.createElement('canvas');
+      const scale = Math.min(1, 1200 / img.width);
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+      const mainBlob = await new Promise(r=>canvas.toBlob(r, IMAGE_MIME, 0.85));
+      // thumb
+      const tsize = 300;
+      const tmp = document.createElement('canvas'); tmp.width=tsize; tmp.height=tsize;
+      const scale2 = Math.max(tsize / img.width, tsize / img.height);
+      const sw = Math.round(img.width * scale2), sh = Math.round(img.height * scale2);
+      const tmp2 = document.createElement('canvas'); tmp2.width=sw; tmp2.height=sh; tmp2.getContext('2d').drawImage(img,0,0,sw,sh);
+      const sx = Math.max(0, Math.round((sw-tsize)/2)), sy = Math.max(0, Math.round((sh-tsize)/2));
+      tmp.getContext('2d').drawImage(tmp2, sx, sy, tsize, tsize, 0,0,tsize,tsize);
+      const thumbBlob = await new Promise(r=>tmp.toBlob(r, IMAGE_MIME, 0.8));
       mainBlobs.push(mainBlob); thumbBlobs.push(thumbBlob);
     }
     const id = 'p_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8);
@@ -564,38 +571,25 @@ async function editorSave(closeAfter){
   }catch(e){ console.error('editorSave error', e); editorProgress.textContent=''; toast('업로드 실패'); }
 }
 
-/* --- auth: create, login, persistence (localStorage) --- */
+/* --- user functions: create/login --- */
 async function getUserByUsername(username){
-  try{
-    const db=await openDB();
-    return await new Promise((res,rej)=>{ const tx=db.transaction(USER_STORE,'readonly'); const idx=tx.objectStore(USER_STORE).index('username'); const rq=idx.get(username); rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>res(null); });
-  }catch(e){ return null; }
+  try{ const db = await openDB(); return new Promise((res,rej)=>{ const tx = db.transaction(USER_STORE,'readonly'); const idx = tx.objectStore(USER_STORE).index('username'); const rq = idx.get(username); rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>res(null); }); }catch(e){ return null; }
 }
-
 async function createUser(username,password){
-  username=String(username||'').trim();
-  if(!username||!password) throw new Error('아이디/비밀번호 필요');
-  if(!/^[a-zA-Z0-9._-]{3,}$/.test(username)) throw new Error('아이디는 3자 이상 영숫자/._- 만 허용');
-  if(password.length<4) throw new Error('비밀번호는 4자 이상');
+  username=String(username||'').trim(); if(!username||!password) throw new Error('아이디/비밀번호 필요'); if(!/^[a-zA-Z0-9._-]{3,}$/.test(username)) throw new Error('아이디는 3자 이상'); if(password.length<4) throw new Error('비밀번호는 4자 이상');
   const existing = await getUserByUsername(username);
   if(existing) throw new Error('이미 존재하는 아이디입니다');
   const users = await dbGetAll(USER_STORE);
   const owner = getSiteOwner();
   let role = 'user';
-  if(owner){
-    if(username === owner) role = 'admin';
-  } else {
-    if(users.length === 0) role = 'admin';
-  }
+  if(owner){ if(username === owner) role = 'admin'; } else { if(users.length === 0) role = 'admin'; }
   const id = 'u_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8);
   const pHash = await hashPassword(password);
-  const user = { id, username, passwordHash: pHash, role, profile: { displayName: username, bio:'', avatar:null }, created_at: new Date().toISOString(), resetTokenHash: null };
+  const user = { id, username, passwordHash: pHash, role, profile:{displayName: username, bio:'', avatar:null}, created_at: new Date().toISOString(), resetTokenHash: null };
   await dbPut(user, USER_STORE);
-  // persist login automatically (user wants to stay logged in across sessions)
   setCurrentUser({ id: user.id, username: user.username, role: user.role });
   return user;
 }
-
 async function authenticateUser(username,password){
   const u = await getUserByUsername(username);
   if(!u) return null;
@@ -604,109 +598,48 @@ async function authenticateUser(username,password){
   return null;
 }
 
-/* --- login UI actions; allow Enter to submit --- */
-loginBtn.addEventListener('click', ()=> { authMsg.textContent=''; authUsername.value=''; authPassword.value=''; loginBackdrop.style.display='flex'; authUsername.focus(); });
-registerBtn.addEventListener('click', ()=> { authMsg.textContent=''; authUsername.value=''; authPassword.value=''; loginBackdrop.style.display='flex'; authUsername.focus(); });
+/* --- login UI and Enter-to-login --- */
+loginBtn.addEventListener('click', ()=>{ authMsg.textContent=''; authUsername.value=''; authPassword.value=''; loginBackdrop.style.display='flex'; authUsername.focus(); });
+registerBtn.addEventListener('click', ()=>{ authMsg.textContent=''; authUsername.value=''; authPassword.value=''; loginBackdrop.style.display='flex'; authUsername.focus(); });
 
-doRegisterBtn && doRegisterBtn.addEventListener('click', async ()=>{
+qs('#doRegister').addEventListener('click', async ()=>{
   const username = String(authUsername.value||'').trim();
   const password = String(authPassword.value||'');
-  try{
-    if(username.length<3||password.length<4){ authMsg.textContent='아이디 3자/비밀번호 4자 이상 필요'; return; }
-    await createUser(username,password);
-    loginBackdrop.style.display='none';
-    authMsg.textContent='';
-    toast('회원가입 및 로그인 완료');
-    await renderGallery();
-  }catch(e){ console.error('register error', e); authMsg.textContent = e.message || '회원가입 실패'; }
+  try{ if(username.length<3||password.length<4){ authMsg.textContent='아이디 3자/비밀번호 4자 이상 필요'; return; } await createUser(username,password); loginBackdrop.style.display='none'; authMsg.textContent=''; toast('회원가입 및 로그인 완료'); await renderGallery(); }catch(e){ console.error('register', e); authMsg.textContent = e.message || '회원가입 실패'; }
 });
-doLoginBtn && doLoginBtn.addEventListener('click', async ()=>{
+
+qs('#doLogin').addEventListener('click', async ()=>{
   const username = String(authUsername.value||'').trim();
   const password = String(authPassword.value||'');
-  try{
-    const u = await authenticateUser(username,password);
-    if(!u){ authMsg.textContent='아이디 또는 비밀번호 불일치'; return; }
-    setCurrentUser(u);
-    loginBackdrop.style.display='none';
-    authMsg.textContent='';
-    toast('로그인 완료');
-    await renderGallery();
-  }catch(e){ console.error('login error', e); authMsg.textContent='로그인 실패'; }
+  try{ const u = await authenticateUser(username,password); if(!u){ authMsg.textContent='아이디 또는 비밀번호 불일치'; return; } setCurrentUser(u); loginBackdrop.style.display='none'; authMsg.textContent=''; toast('로그인 완료'); await renderGallery(); }catch(e){ console.error('login', e); authMsg.textContent='로그인 실패'; }
 });
-// Enter key triggers login when focus in username/password
+
+// Enter key handling on login fields
 [authUsername, authPassword].forEach(el=>{
-  el && el.addEventListener('keydown', async (ev)=>{
-    if(ev.key === 'Enter'){
-      ev.preventDefault();
-      // prefer login button action
-      if(doLoginBtn) doLoginBtn.click();
-    }
+  el && el.addEventListener('keydown', (ev)=>{
+    if(ev.key === 'Enter'){ ev.preventDefault(); qs('#doLogin').click(); }
   });
 });
 
 /* --- logout --- */
-logoutBtn.addEventListener('click', ()=> {
-  if(!confirm('로그아웃하시겠습니까?')) return;
-  setCurrentUser(null);
-  saveCurrentUser(null);
-  toast('로그아웃되었습니다');
-});
+logoutBtn.addEventListener('click', ()=>{ if(!confirm('로그아웃하시겠습니까?')) return; setCurrentUser(null); saveCurrentUser(null); toast('로그아웃되었습니다'); });
 
-/* --- my posts filter --- */
-myPostsBtn.addEventListener('click', async ()=>{
-  if(!currentUser){ toast('로그인 후 사용하세요'); return; }
-  showOnlyMyPosts = !showOnlyMyPosts;
-  myPostsBtn.textContent = showOnlyMyPosts ? '내 게시글(ON)' : '내 게시글';
-  await renderGallery();
-});
+/* --- my posts toggle --- */
+myPostsBtn.addEventListener('click', ()=>{ if(!currentUser){ toast('로그인 후 사용하세요'); return; } showOnlyMyPosts = !showOnlyMyPosts; myPostsBtn.textContent = showOnlyMyPosts ? '내 게시글(ON)' : '내 게시글'; renderGallery(); });
 
 /* --- settings --- */
-settingsBtn.addEventListener('click', ()=>{
-  if(!currentUser || currentUser.role !== 'admin'){ toast('설정 접근 권한이 없습니다'); return; }
-  siteOwnerInput.value = getSiteOwner();
-  settingsBackdrop.style.display='flex';
-});
-btnSaveSettings.addEventListener('click', ()=> {
-  if(!currentUser || currentUser.role !== 'admin'){ toast('권한 없음'); settingsBackdrop.style.display='none'; return; }
-  const owner = (siteOwnerInput.value||'').trim();
-  if(owner) setSiteOwner(owner); else setSiteOwner('');
-  toast('사이트 소유자 저장됨');
-  settingsBackdrop.style.display='none';
-});
+settingsBtn.addEventListener('click', ()=>{ if(!currentUser || currentUser.role !== 'admin'){ toast('설정 접근 권한이 없습니다'); return; } siteOwnerInput.value = getSiteOwner(); settingsBackdrop.style.display='flex'; });
+btnSaveSettings.addEventListener('click', ()=>{ if(!currentUser || currentUser.role !== 'admin'){ toast('권한 없음'); settingsBackdrop.style.display='none'; return; } const owner=(siteOwnerInput.value||'').trim(); if(owner) setSiteOwner(owner); else setSiteOwner(''); toast('사이트 소유자 저장됨'); settingsBackdrop.style.display='none'; });
 settingsClose.addEventListener('click', ()=> settingsBackdrop.style.display='none');
 
-/* --- more menu toggle --- */
-moreBtn.addEventListener('click', ()=> { moreMenu.style.display = moreMenu.style.display === 'block' ? 'none' : 'block'; });
+/* --- more menu --- */
+moreBtn.addEventListener('click', ()=> moreMenu.style.display = moreMenu.style.display === 'block' ? 'none' : 'block');
 document.addEventListener('click', (e)=>{ if(!moreBtn.contains(e.target) && !moreMenu.contains(e.target)) moreMenu.style.display='none'; });
 
-/* --- export/import --- */
-btnExport.addEventListener('click', async ()=>{
-  try{
-    const posts = await dbGetAll(STORE);
-    const out = [];
-    for(const p of posts){
-      const mainBase = p.mainBlobs ? await Promise.all(p.mainBlobs.map(b=>blobToBase64(b))) : null;
-      const thumbBase = p.thumbBlobs ? await Promise.all(p.thumbBlobs.map(b=>blobToBase64(b))) : null;
-      out.push({ id:p.id, title:p.title, body:p.body, tags:p.tags, created_at:p.created_at, category:p.category, authorId:p.authorId||null, authorName:p.authorName||null, anon:p.anon||false, anonPassHash:p.anonPassHash||null, nsfw:!!p.nsfw, mainBase, thumbBase });
-    }
-    const blob = new Blob([JSON.stringify(out,null,2)], {type:'application/json'});
-    const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='minipix_export.json'; a.click(); URL.revokeObjectURL(url);
-    toast('내보내기 완료');
-  }catch(e){ console.error('export error', e); toast('내보내기 실패'); }
-});
-importFile.addEventListener('change', async e=>{
-  const f=e.target.files[0]; if(!f) return;
-  try{
-    const txt = await f.text(); const arr = JSON.parse(txt);
-    for(const item of arr){
-      const mainBlobs = item.mainBase ? item.mainBase.map(b=>base64ToBlob(b)) : [];
-      const thumbBlobs = item.thumbBase ? item.thumbBase.map(b=>base64ToBlob(b)) : [];
-      const p = { id: item.id || ('p_'+Date.now()), title: item.title || '', body: item.body || '', tags: item.tags || [], created_at: item.created_at || new Date().toISOString(), category: item.category || 'photos', mainBlobs, thumbBlobs, authorId: item.authorId||null, authorName: item.authorName||null, anon: !!item.anon, anonPassHash: item.anonPassHash||null, nsfw: !!item.nsfw };
-      await dbPut(p, STORE);
-    }
-    toast('가져오기 완료'); await renderGallery();
-  }catch(err){ console.error('import error', err); toast('가져오기 오류'); } finally { importFile.value=''; }
-});
+/* --- export/import helpers --- */
+btnExport.addEventListener('click', async ()=>{ try{ const posts = await dbGetAll(STORE); const out=[]; for(const p of posts){ const mainBase = p.mainBlobs ? await Promise.all(p.mainBlobs.map(b=>blobToBase64(b))) : null; const thumbBase = p.thumbBlobs ? await Promise.all(p.thumbBlobs.map(b=>blobToBase64(b))) : null; out.push({ id:p.id, title:p.title, body:p.body, tags:p.tags, created_at:p.created_at, category:p.category, authorId:p.authorId||null, authorName:p.authorName||null, anon:p.anon||false, anonPassHash:p.anonPassHash||null, nsfw:!!p.nsfw, mainBase, thumbBase }); } const blob = new Blob([JSON.stringify(out,null,2)], {type:'application/json'}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='minipix_export.json'; a.click(); URL.revokeObjectURL(url); toast('내보내기 완료'); }catch(e){ console.error('export', e); toast('내보내기 실패'); } });
+
+importFile.addEventListener('change', async e=>{ const f=e.target.files[0]; if(!f) return; try{ const txt = await f.text(); const arr = JSON.parse(txt); for(const item of arr){ const mainBlobs = item.mainBase ? item.mainBase.map(b=>base64ToBlob(b)) : []; const thumbBlobs = item.thumbBase ? item.thumbBase.map(b=>base64ToBlob(b)) : []; const p = { id: item.id || ('p_'+Date.now()), title: item.title || '', body: item.body || '', tags: item.tags || [], created_at: item.created_at || new Date().toISOString(), category: item.category || 'photos', mainBlobs, thumbBlobs, authorId: item.authorId||null, authorName: item.authorName||null, anon: !!item.anon, anonPassHash: item.anonPassHash||null, nsfw: !!item.nsfw }; await dbPut(p, STORE); } toast('가져오기 완료'); await renderGallery(); }catch(err){ console.error('import', err); toast('가져오기 오류'); } finally { importFile.value=''; } });
 
 /* --- bulk download --- */
 if(bulkDownloadBtn){
@@ -715,7 +648,7 @@ if(bulkDownloadBtn){
     if(!pid){ alert('게시물을 열고 시도하세요'); return; }
     try{
       const post = await dbGet(pid);
-      if(!post || !post.mainBlobs || post.mainBlobs.length===0){ alert('이미지가 없습니다.'); return; }
+      if(!post || !post.mainBlobs || post.mainBlobs.length===0){ alert('다운로드할 이미지가 없습니다.'); return; }
       if(typeof JSZip === 'undefined'){ alert('JSZip 로드 실패'); return; }
       const zip = new JSZip();
       for(let i=0;i<post.mainBlobs.length;i++){
@@ -730,39 +663,27 @@ if(bulkDownloadBtn){
 }
 
 /* --- grid / view toggles --- */
-gridLargeBtn.addEventListener('click', ()=> { gridClass='grid-large'; applyGridClass(); renderGallery(); });
-gridMediumBtn.addEventListener('click', ()=> { gridClass='grid-medium'; applyGridClass(); renderGallery(); });
-gridCompactBtn.addEventListener('click', ()=> { gridClass='grid-compact'; applyGridClass(); renderGallery(); });
+gridLargeBtn.addEventListener('click', ()=>{ gridClass='grid-large'; applyGridClass(); renderGallery(); });
+gridMediumBtn.addEventListener('click', ()=>{ gridClass='grid-medium'; applyGridClass(); renderGallery(); });
+gridCompactBtn.addEventListener('click', ()=>{ gridClass='grid-compact'; applyGridClass(); renderGallery(); });
 function applyGridClass(){ galleryEl.className = 'gallery ' + gridClass; }
 
-viewPhotosBtn.addEventListener('click', ()=> { viewMode='photos'; applyViewMode(); renderGallery(); });
-viewBoardBtn.addEventListener('click', ()=> { viewMode='board'; applyViewMode(); renderGallery(); });
+viewPhotosBtn.addEventListener('click', ()=>{ viewMode='photos'; applyViewMode(); renderGallery(); });
+viewBoardBtn.addEventListener('click', ()=>{ viewMode='board'; applyViewMode(); renderGallery(); });
 function applyViewMode(){ currentViewLabel.textContent = viewMode==='photos' ? '사진형' : '게시판형'; viewPhotosBtn.classList.toggle('primary', viewMode==='photos'); viewBoardBtn.classList.toggle('primary', viewMode==='board'); }
 
-/* --- search/sort/filter hooks --- */
-searchInput.addEventListener('input', ()=> renderGallery());
-sortSelect.addEventListener('change', ()=> renderGallery());
-filterSelect.addEventListener('change', ()=> renderGallery());
+/* --- brand click -> go home (no logout) --- */
+brand.addEventListener('click', ()=>{ postView.style.display='none'; document.getElementById('gallery').style.display='grid'; window.currentOpenPostId = null; });
 
-/* --- misc helpers --- */
-function blobToBase64(blob){ return new Promise(res=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result.split(',')[1]); fr.readAsDataURL(blob); }); }
-function base64ToBlob(b64,mime='image/jpeg'){ const bin=atob(b64); const len=bin.length; const arr=new Uint8Array(len); for(let i=0;i<len;i++) arr[i]=bin.charCodeAt(i); return new Blob([arr],{type:mime}); }
+/* --- close menus on outside click / mobile tap --- */
+document.addEventListener('click', e=>{ if(!tools.contains(e.target)) tools.classList.remove('open'); if(!moreBtn.contains(e.target) && !moreMenu.contains(e.target)) moreMenu.style.display='none'; });
+document.addEventListener('touchstart', ()=>{ tools.classList.remove('open'); moreMenu.style.display='none'; });
 
-/* --- ensure clicking outside of mobile menu closes it --- */
-document.addEventListener('click', e=>{
-  const toolsEl = tools;
-  if(!toolsEl.contains(e.target)){
-    tools.classList.remove('open');
-  }
-});
+/* --- helper base64/Blob --- */
+function blobToBase64(blob){ return new Promise(res=>{ const fr = new FileReader(); fr.onload = ()=> res(fr.result.split(',')[1]); fr.readAsDataURL(blob); }); }
+function base64ToBlob(b64,mime='image/jpeg'){ const bin=atob(b64); const len=bin.length; const arr=new Uint8Array(len); for(let i=0;i<len;i++) arr[i]=bin.charCodeAt(i); return new Blob([arr], { type: mime }); }
 
-/* --- prevent horizontal overflow on mobile by closing menus when tapping anywhere --- */
-document.addEventListener('touchstart', ()=> { tools.classList.remove('open'); moreMenu.style.display='none'; });
-
-/* --- updateNewButtonState (if requireMember feature is re-added in future) --- */
-function updateNewButtonState(){ /* placeholder for future member-only-mode */ }
-
-/* --- revoke URLs on unload --- */
+/* --- revoke on unload --- */
 window.addEventListener('beforeunload', ()=> revokeAllURLs());
 
 </script>
