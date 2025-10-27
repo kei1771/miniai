@@ -3,23 +3,24 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>MiniPix — AI 그림 갤러리 (Fixed & Mobile)</title>
+<title>MiniPix — AI 그림 갤러리 (Fixed Persistent Login & UI)</title>
 <style>
 :root{
   --bg:#fafbfd; --card:#fff; --muted:#6b7280; --accent:#2b6ef6; --danger:#c53;
   --gap:10px;
+  --max-width:1100px;
 }
 *{box-sizing:border-box}
 html,body{height:100%}
 body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,'Noto Sans KR',sans-serif;background:var(--bg);color:#111;-webkit-font-smoothing:antialiased}
 .topbar{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #eef2ff;background:#fff;position:sticky;top:0;z-index:60}
 .brand{font-weight:700;color:var(--accent);text-decoration:none;font-size:16px;cursor:pointer}
-.tools{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tools{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;position:relative}
 .btn{padding:8px 10px;border-radius:8px;border:1px solid #e6e9f2;background:#fff;cursor:pointer}
 .btn.primary{background:var(--accent);color:#fff;border:0}
 .btn.danger{border-color:#f8d3d3;color:var(--danger)}
-.container{max-width:1100px;margin:12px auto;padding:0 12px}
-.header-sub{display:flex;gap:8px;align-items:center;margin:10px 0}
+.container{max-width:var(--max-width);margin:12px auto;padding:0 12px}
+.header-sub{display:flex;gap:8px;align-items:center;margin:8px 0}
 .view-toggle{display:flex;gap:6px}
 .view-toggle button{padding:6px 10px;border-radius:8px;border:1px solid #e6e9f2;background:#fff}
 .grid-toggle{display:flex;gap:6px;margin-left:12px}
@@ -50,13 +51,16 @@ input,textarea,select{padding:8px;border-radius:8px;border:1px solid #e6e9f2;fon
 .carousel-thumbs img{width:64px;height:64px;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid transparent}
 .nsfw-badge{position:absolute;left:8px;top:8px;background:#ffefd5;color:#b24;border-radius:6px;padding:4px 6px;font-size:12px;border:1px solid #ffd6a6}
 .menu-toggle{display:none;padding:8px;border-radius:8px;border:1px solid #eef2ff;background:#fff;cursor:pointer}
+.more-toggle{position:relative}
+.more-menu{position:absolute;right:0;top:40px;background:#fff;padding:8px;border-radius:8px;border:1px solid #eef2ff;box-shadow:0 8px 20px rgba(0,0,0,0.08);display:none;z-index:200}
+.more-menu .btn{display:block;width:100%;text-align:left;margin:6px 0}
 
 /* grid size variants */
 .grid-large{grid-template-columns:repeat(auto-fill,minmax(220px,1fr));}
 .grid-medium{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));}
 .grid-compact{grid-template-columns:repeat(auto-fill,minmax(100px,1fr));}
 
-/* Mobile styles */
+/* Responsive */
 @media (max-width:900px){
   .thumb-wrap{height:220px}
 }
@@ -67,13 +71,16 @@ input,textarea,select{padding:8px;border-radius:8px;border:1px solid #e6e9f2;fon
   .tools{gap:6px}
   .brand{font-size:15px}
   .menu-toggle{display:inline-block}
-  .tools-buttons{display:none}
   .tools.open .tools-buttons{display:flex;flex-direction:column;position:absolute;right:12px;top:56px;background:#fff;padding:8px;border-radius:8px;border:1px solid #eef2ff;box-shadow:0 8px 20px rgba(0,0,0,0.08)}
   .tools.open .tools-buttons .btn{margin:6px 0}
   .gallery{gap:8px}
 }
 /* avoid horizontal overflow */
 html,body,#app{max-width:100%;overflow-x:hidden}
+.list-item{display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid #f0f3fb}
+.list-item .thumb-small{width:80px;height:60px;object-fit:cover;border-radius:6px;background:#f6f8fb}
+.list-title{font-weight:600}
+.controls-inline{display:flex;gap:8px;align-items:center}
 </style>
 </head>
 <body>
@@ -84,7 +91,7 @@ html,body,#app{max-width:100%;overflow-x:hidden}
 
     <div class="tools" role="navigation" aria-label="도구" id="tools">
       <div class="toolbar-search" role="search" aria-label="검색">
-        <input id="search" class="input-search" placeholder="검색 (제목/본문/태그)" aria-label="검색" />
+        <input id="search" class="input-search" placeholder="검색 (제목/본문/태그/작성자)" aria-label="검색" />
         <select id="sort" class="input-search" style="width:120px" aria-label="정렬">
           <option value="desc">최신순</option>
           <option value="asc">오래된순</option>
@@ -99,25 +106,31 @@ html,body,#app{max-width:100%;overflow-x:hidden}
       <div class="tools-buttons" id="toolsButtons">
         <div id="userArea" style="display:none;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;background:#f6f8ff;border:1px solid #e6eefc">
           <span id="userName">Guest</span>
+          <button id="myPostsBtn" class="btn" title="내 게시글 보기">내 게시글</button>
           <button id="logoutBtn" class="btn">로그아웃</button>
+          <button id="settingsBtn" class="btn" style="display:none">설정</button>
         </div>
 
         <button id="loginBtn" class="btn">로그인</button>
         <button id="registerBtn" class="btn">회원가입</button>
-        <button id="settingsBtn" class="btn" style="display:none">설정</button>
 
         <button id="btnNew" class="btn primary">새 글 올리기</button>
         <button id="btnRefresh" class="btn">새로고침</button>
 
         <div class="grid-toggle" title="썸네일 크기">
-          <button id="gridLarge" class="btn">크게 (2x)</button>
+          <button id="gridLarge" class="btn">크게</button>
           <button id="gridMedium" class="btn">중간</button>
-          <button id="gridCompact" class="btn">작게 (4x)</button>
+          <button id="gridCompact" class="btn">작게</button>
         </div>
 
-        <button id="btnExport" class="btn">내보내기</button>
-        <label class="btn file" title="가져오기">가져오기<input id="importFile" type="file" accept="application/json" style="display:none" /></label>
-        <button id="btnClear" class="btn">전체 삭제</button>
+        <div class="more-toggle">
+          <button id="moreBtn" class="btn">더보기 ▾</button>
+          <div id="moreMenu" class="more-menu" role="menu">
+            <button id="btnExport" class="btn">내보내기</button>
+            <label class="btn file" title="가져오기">가져오기<input id="importFile" type="file" accept="application/json" style="display:none" /></label>
+            <!-- removed global 전체삭제 as requested -->
+          </div>
+        </div>
       </div>
     </div>
   </header>
@@ -215,7 +228,7 @@ html,body,#app{max-width:100%;overflow-x:hidden}
     </div>
   </div>
 
-  <!-- Login Modal -->
+  <!-- Login Modal (simple) -->
   <div id="loginBackdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);align-items:center;justify-content:center;padding:12px;z-index:220">
     <div style="background:#fff;padding:14px;border-radius:10px;max-width:420px">
       <h3>로그인 / 회원가입</h3>
@@ -237,101 +250,64 @@ html,body,#app{max-width:100%;overflow-x:hidden}
     </div>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
-/* Updated MiniPix single-file:
- - Session persistence fixed (sessionStorage) so refresh/navigation keep login in same tab.
- - Initial DB load -> immediate renderGallery (no need to create new post to see existing).
- - Mobile: grid size toggle (large/medium/compact), view mode (사진형/게시판형), responsive CSS; prevents horizontal overflow.
- - Removed 'memo' category. Added view toggle below banner.
- - Settings modal & siteOwner input visible only to admin (and saved to localStorage). Non-admins cannot access.
- - Removed explicit anonymous-allow toggle. Anonymous posting still possible (with deletion password).
- - NSFW posts hidden from not-logged-in users (both in gallery and post view).
- - Fixed bulk download (uses JSZip + Blob.arrayBuffer).
+/*
+  Changes implemented in this file (as requested):
+  - Persistent login across browser sessions (localStorage) unless user explicitly logs out.
+    -> login state restored on load (localStorage key: minipix_current_user)
+  - Enter key triggers login in login modal (username/password fields).
+  - Settings button placed next to Logout; settings modal only visible to admin users.
+  - Removed global "전체 삭제" button. Users can only delete their own posts (or admins).
+  - "내 게시글 보기" button added to filter gallery to only show user's posts.
+  - Search now checks author username as well.
+  - Bulk download fixed: works when a post is opened; uses window.currentOpenPostId.
+  - When returning to main from post view, the post content is closed and state cleared.
+  - Board view now shows list entries (titles) for posts including ones with images.
+  - Mobile menu: clicking outside closes it; tapping anywhere closes the open toggles.
+  - Export/Import moved into "더보기" menu; 전체삭제 removed.
+  - NSFW posts: hidden from non-logged-in users in gallery and blocked in post view.
+  - Other robustness fixes and console error handling.
 */
 
-// ---- config/state ----
+/* --- Config --- */
 const DB_NAME = 'minipix-db-v2';
 const STORE = 'posts';
 const USER_STORE = 'users';
 const DB_VERSION = 4;
 const MAX_FILES = 200;
 const THUMB_SIZE = 400;
-const MAX_MAIN_WIDTH = 1920;
 const IMAGE_MIME = 'image/jpeg';
 const IMAGE_QUALITY = 0.85;
 
-let currentUser = null; // session user {id, username, role}
-let settings = { allowNSFW:false };
-
-// util
-const qs = (s, ctx=document)=> ctx.querySelector(s);
-const qsa = (s, ctx=document)=> Array.from((ctx||document).querySelectorAll(s));
+/* --- Utilities --- */
+const qs = (s,ctx=document)=>ctx.querySelector(s);
+const qsa = (s,ctx=document)=>Array.from((ctx||document).querySelectorAll(s));
 function toast(msg, t=1400){ const el=document.createElement('div'); el.textContent=msg; el.style.position='fixed'; el.style.right='12px'; el.style.bottom='12px'; el.style.background='#111'; el.style.color='#fff'; el.style.padding='8px 12px'; el.style.borderRadius='8px'; el.style.zIndex=9999; document.body.appendChild(el); setTimeout(()=>el.remove(), t); }
 function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-// ---- IndexedDB ----
-function openDB(){
-  return new Promise((resolve,reject)=>{
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = e => {
-      const db = e.target.result;
-      if(!db.objectStoreNames.contains(STORE)){
-        const os = db.createObjectStore(STORE,{keyPath:'id'});
-        os.createIndex('created_at','created_at',{unique:false});
-      }
-      if(!db.objectStoreNames.contains(USER_STORE)){
-        const us = db.createObjectStore(USER_STORE,{keyPath:'id'});
-        us.createIndex('username','username',{unique:true});
-      }
-    };
-    req.onsuccess = e => resolve(e.target.result);
-    req.onerror = e => reject(e.target.error);
-  });
-}
-async function dbPut(obj, store=STORE){ const db = await openDB(); return new Promise((res,rej)=>{ const tx = db.transaction(store,'readwrite'); tx.objectStore(store).put(obj); tx.oncomplete = ()=> res(obj); tx.onerror = e => rej(e.target.error); }); }
-async function dbGet(id, store=STORE){ const db = await openDB(); return new Promise((res,rej)=>{ const tx = db.transaction(store,'readonly'); const r = tx.objectStore(store).get(id); r.onsuccess = ()=> res(r.result); r.onerror = e => rej(e.target.error); }); }
-async function dbGetAll(store=STORE){ const db = await openDB(); return new Promise((res,rej)=>{ const tx = db.transaction(store,'readonly'); const r = tx.objectStore(store).getAll(); r.onsuccess = ()=> res(r.result || []); r.onerror = e => rej(e.target.error); }); }
-async function dbDelete(id, store=STORE){ const db = await openDB(); return new Promise((res,rej)=>{ const tx = db.transaction(store,'readwrite'); tx.objectStore(store).delete(id); tx.oncomplete = ()=> res(); tx.onerror = e => rej(e.target.error); }); }
-async function dbClear(store=STORE){ const db = await openDB(); return new Promise((res,rej)=>{ const tx = db.transaction(store,'readwrite'); tx.objectStore(store).clear(); tx.oncomplete = ()=> res(); tx.onerror = e => rej(e.target.error); }); }
+/* --- IndexedDB helpers --- */
+function openDB(){ return new Promise((resolve,reject)=>{ const req=indexedDB.open(DB_NAME, DB_VERSION); req.onupgradeneeded = e=>{ const db=e.target.result; if(!db.objectStoreNames.contains(STORE)){ const os=db.createObjectStore(STORE,{keyPath:'id'}); os.createIndex('created_at','created_at',{unique:false}); } if(!db.objectStoreNames.contains(USER_STORE)){ const us=db.createObjectStore(USER_STORE,{keyPath:'id'}); us.createIndex('username','username',{unique:true}); } }; req.onsuccess=e=>resolve(e.target.result); req.onerror=e=>reject(e.target.error); }); }
+async function dbPut(obj,store=STORE){ const db=await openDB(); return new Promise((res,rej)=>{ const tx=db.transaction(store,'readwrite'); tx.objectStore(store).put(obj); tx.oncomplete=()=>res(obj); tx.onerror=e=>rej(e.target.error); }); }
+async function dbGet(id,store=STORE){ const db=await openDB(); return new Promise((res,rej)=>{ const tx=db.transaction(store,'readonly'); const r=tx.objectStore(store).get(id); r.onsuccess=()=>res(r.result); r.onerror=e=>rej(e.target.error); }); }
+async function dbGetAll(store=STORE){ const db=await openDB(); return new Promise((res,rej)=>{ const tx=db.transaction(store,'readonly'); const r=tx.objectStore(store).getAll(); r.onsuccess=()=>res(r.result||[]); r.onerror=e=>rej(e.target.error); }); }
+async function dbDelete(id,store=STORE){ const db=await openDB(); return new Promise((res,rej)=>{ const tx=db.transaction(store,'readwrite'); tx.objectStore(store).delete(id); tx.oncomplete=()=>res(); tx.onerror=e=>rej(e.target.error); }); }
 
-// ---- password hashing ----
+/* --- password hashing (SHA-256) --- */
 async function hashPassword(password){
   if(window.crypto && crypto.subtle && typeof crypto.subtle.digest === 'function'){
-    const enc = new TextEncoder();
-    const buf = await crypto.subtle.digest('SHA-256', enc.encode(password || ''));
+    const enc=new TextEncoder();
+    const buf=await crypto.subtle.digest('SHA-256', enc.encode(password||''));
     return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-  } else {
-    let h=0; for(let i=0;i<password.length;i++){ h=((h<<5)-h)+password.charCodeAt(i); h|=0; } return 'f'+Math.abs(h);
-  }
+  } else { let h=0; for(let i=0;i<password.length;i++){ h=((h<<5)-h)+password.charCodeAt(i); h|=0 } return 'f'+Math.abs(h); }
 }
 
-// ---- image helpers ----
-function readFileAsImage(file){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>{ const img=new Image(); img.onload=()=>res(img); img.onerror=rej; img.src=fr.result; }; fr.onerror=rej; fr.readAsDataURL(file); }); }
-async function processImage(img, maxWidth=MAX_MAIN_WIDTH, thumbSize=THUMB_SIZE, mime=IMAGE_MIME, quality=IMAGE_QUALITY){
-  const ratio = Math.min(1, maxWidth / img.width);
-  const w = Math.round(img.width * ratio), h = Math.round(img.height * ratio);
-  const c = document.createElement('canvas'); c.width = w; c.height = h;
-  const ctx = c.getContext('2d'); ctx.drawImage(img, 0,0,w,h);
-  const mainBlob = await new Promise(r=>c.toBlob(r, mime, quality));
-  const scale = Math.max(thumbSize / img.width, thumbSize / img.height);
-  const sw = Math.round(img.width * scale), sh = Math.round(img.height * scale);
-  const tmp = document.createElement('canvas'); tmp.width = sw; tmp.height = sh;
-  tmp.getContext('2d').drawImage(img,0,0,sw,sh);
-  const sx = Math.max(0, Math.round((sw - thumbSize)/2)), sy = Math.max(0, Math.round((sh - thumbSize)/2));
-  const t = document.createElement('canvas'); t.width = thumbSize; t.height = thumbSize;
-  t.getContext('2d').drawImage(tmp, sx, sy, thumbSize, thumbSize, 0,0,thumbSize,thumbSize);
-  const thumbBlob = await new Promise(r=>t.toBlob(r, mime, quality));
-  return { mainBlob, thumbBlob, width: img.width, height: img.height };
-}
-
-// ---- object URL pool ----
+/* --- object URL pool --- */
 const _urls = [];
-function makeURL(b){ try{ const u = URL.createObjectURL(b); _urls.push(u); return u; }catch(e){ return ''; } }
-function revokeAllURLs(){ try{ _urls.forEach(u=>{ try{ URL.revokeObjectURL(u); }catch(e){} }); _urls.length=0; }catch(e){} }
+function makeURL(b){ try{ const u=URL.createObjectURL(b); _urls.push(u); return u; }catch(e){ return ''; } }
+function revokeAllURLs(){ try{ _urls.forEach(u=>{ try{ URL.revokeObjectURL(u);}catch(e){} }); _urls.length=0; }catch(e){} }
 
-// ---- DOM refs ----
+/* --- DOM refs --- */
 const galleryEl = qs('#gallery');
 const emptyEl = qs('#empty');
 const brand = qs('#brand');
@@ -341,21 +317,35 @@ const toolsButtons = qs('#toolsButtons');
 const searchInput = qs('#search');
 const sortSelect = qs('#sort');
 const filterSelect = qs('#filter');
-
 const gridLargeBtn = qs('#gridLarge');
 const gridMediumBtn = qs('#gridMedium');
 const gridCompactBtn = qs('#gridCompact');
-
 const viewPhotosBtn = qs('#viewPhotos');
 const viewBoardBtn = qs('#viewBoard');
 const currentViewLabel = qs('#currentView');
-
 const btnNew = qs('#btnNew');
 const btnRefresh = qs('#btnRefresh');
+const moreBtn = qs('#moreBtn');
+const moreMenu = qs('#moreMenu');
 const btnExport = qs('#btnExport');
 const importFile = qs('#importFile');
-const btnClear = qs('#btnClear');
-
+const loginBackdrop = qs('#loginBackdrop');
+const loginBtn = qs('#loginBtn');
+const registerBtn = qs('#registerBtn');
+const doLoginBtn = qs('#doLogin');
+const doRegisterBtn = qs('#doRegister');
+const authUsername = qs('#authUsername');
+const authPassword = qs('#authPassword');
+const authMsg = qs('#authMsg');
+const userArea = qs('#userArea');
+const userNameEl = qs('#userName');
+const logoutBtn = qs('#logoutBtn');
+const myPostsBtn = qs('#myPostsBtn');
+const settingsBtn = qs('#settingsBtn');
+const settingsBackdrop = qs('#settingsBackdrop');
+const siteOwnerInput = qs('#siteOwner');
+const btnSaveSettings = qs('#btnSaveSettings');
+const settingsClose = qs('#settingsClose');
 const editorModal = qs('#editorModal');
 const editorClose = qs('#editorClose');
 const filesInput = qs('#files');
@@ -371,7 +361,6 @@ const editorProgress = qs('#editorProgress');
 const anonPassRow = qs('#anonPassRow');
 const anonPasswordInput = qs('#anonPassword');
 const nsfwCheck = qs('#nsfwCheck');
-
 const postView = qs('#postView');
 const postTitleView = qs('#postTitleView');
 const metaView = qs('#metaView');
@@ -383,191 +372,170 @@ const btnBack = qs('#btnBack');
 const btnEditPost = qs('#btnEditPost');
 const btnDeletePost = qs('#btnDeletePost');
 const downloadLink = qs('#downloadLink');
-const bulkDownloadBtn = qs('#bulkDownloadBtn') || null;
-
-const loginBackdrop = qs('#loginBackdrop');
-const loginBtn = qs('#loginBtn');
-const registerBtn = qs('#registerBtn');
-const doLogin = qs('#doLogin');
-const doRegister = qs('#doRegister');
-const authUsername = qs('#authUsername');
-const authPassword = qs('#authPassword');
-const authMsg = qs('#authMsg');
-const userArea = qs('#userArea');
-const userName = qs('#userName');
-const logoutBtn = qs('#logoutBtn');
-const settingsBtn = qs('#settingsBtn');
-const settingsBackdrop = qs('#settingsBackdrop');
-const siteOwnerInput = qs('#siteOwner');
-const btnSaveSettings = qs('#btnSaveSettings');
-const settingsClose = qs('#settingsClose');
-
+const bulkDownloadBtn = qs('#bulkDownloadBtn');
 const copyModalBackdrop = qs('#copyModalBackdrop');
 const copyModalOk = qs('#copyModalOk');
 
-// ---- menu toggle ----
-menuToggle.addEventListener('click', ()=> tools.classList.toggle('open'));
+/* --- state --- */
+let currentUser = null; // {id, username, role}
+let gridClass = 'grid-medium';
+let viewMode = 'photos';
+let showOnlyMyPosts = false;
+window.currentOpenPostId = null;
 
-// ---- grid / view defaults ----
-let gridClass = 'grid-medium'; // 'grid-large' | 'grid-medium' | 'grid-compact'
-let viewMode = 'photos'; // 'photos' | 'board'
-
-// ---- session helpers ----
-function saveSessionUser(u){ if(u) sessionStorage.setItem('minipix_session_user', JSON.stringify(u)); else sessionStorage.removeItem('minipix_session_user'); }
-function loadSessionUser(){ try{ const s=sessionStorage.getItem('minipix_session_user'); return s?JSON.parse(s):null;}catch(e){return null;} }
+/* --- site owner helper (admin) --- */
 function getSiteOwner(){ return localStorage.getItem('minipix_site_owner') || ''; }
 function setSiteOwner(v){ if(v) localStorage.setItem('minipix_site_owner', v); else localStorage.removeItem('minipix_site_owner'); }
 
-// ---- set current user UI ----
+/* --- persistence of login: use localStorage (persistent across browser restarts unless user logs out) --- */
+function saveCurrentUser(u){ if(u) localStorage.setItem('minipix_current_user', JSON.stringify(u)); else localStorage.removeItem('minipix_current_user'); }
+function loadCurrentUser(){ try{ const s = localStorage.getItem('minipix_current_user'); return s?JSON.parse(s):null;}catch(e){return null;} }
+
+/* --- set current user UI --- */
 function setCurrentUser(user){
   currentUser = user;
   if(user){
     userArea.style.display='flex';
-    userName.textContent = user.username + (user.role==='admin' ? ' (관리자)' : '');
+    userNameEl.textContent = user.username + (user.role==='admin' ? ' (관리자)' : '');
     loginBtn.style.display='none';
     registerBtn.style.display='none';
-    // show settings only for admin
-    if(user.role === 'admin') settingsBtn.style.display='inline-block';
-    else settingsBtn.style.display='none';
+    // settings visible only to admin
+    settingsBtn.style.display = (user.role==='admin') ? 'inline-block' : 'none';
   } else {
     userArea.style.display='none';
     loginBtn.style.display='inline-block';
     registerBtn.style.display='inline-block';
     settingsBtn.style.display='none';
   }
-  saveSessionUser(currentUser);
-  // editor anon row (we always show anon pass field, as anonymous allowed)
+  saveCurrentUser(currentUser);
   anonPassRow.style.display = (!currentUser) ? 'block' : 'none';
   updateNewButtonState();
 }
 
-// ---- boot sequence ----
+/* --- boot --- */
 (async function boot(){
-  try{
-    await openDB(); // ensure DB exists first
-  }catch(err){
-    console.error('DB open failed', err);
-    toast('IndexedDB 열기 실패(콘솔 확인)');
-  }
+  try{ await openDB(); } catch(e){ console.error('DB open error', e); toast('DB 열기 실패(콘솔 확인)'); }
   attachEvents();
-  // load settings
-  try{ settings = Object.assign(settings, JSON.parse(localStorage.getItem('minipix_settings')||'{}')); }catch(e){}
-  const sess = loadSessionUser();
-  if(sess) setCurrentUser(sess); else setCurrentUser(null);
-  // initial UI
+  // restore login if present
+  const saved = loadCurrentUser();
+  if(saved) setCurrentUser(saved);
+  else setCurrentUser(null);
   applyGridClass();
   applyViewMode();
-  // render gallery after DB ready
   await renderGallery();
 })();
 
-// ---- render gallery ----
+/* --- render gallery --- */
 async function renderGallery(){
   try{
     revokeAllURLs();
     const posts = await dbGetAll(STORE);
-    // sort
-    const sorted = posts.sort((a,b)=> sortSelect.value === 'desc' ? b.created_at.localeCompare(a.created_at) : a.created_at.localeCompare(b.created_at));
-    // filter by viewMode and search
+    let items = posts.sort((a,b)=> sortSelect.value==='desc' ? b.created_at.localeCompare(a.created_at) : a.created_at.localeCompare(b.created_at));
     const q = (searchInput.value||'').trim().toLowerCase();
-    const catFilter = filterSelect.value;
-    let visible = sorted.filter(p=>{
-      if(catFilter !== 'all' && p.category !== catFilter) return false;
+    const cat = filterSelect.value;
+
+    items = items.filter(p=>{
+      if(cat !== 'all' && p.category !== cat) return false;
       if(viewMode === 'photos' && p.category !== 'photos') return false;
       if(viewMode === 'board' && p.category !== 'board') return false;
+      if(showOnlyMyPosts && (!currentUser || p.authorId !== currentUser.id)) return false;
+      if(p.nsfw && !currentUser) return false; // hide nsfw from non-logged-in
       if(!q) return true;
-      return (p.title||'').toLowerCase().includes(q) || (p.body||'').toLowerCase().includes(q) || (p.tags||[]).join(' ').toLowerCase().includes(q);
-    });
-
-    // NSFW: hide nsfw posts from not-logged-in users
-    visible = visible.filter(p => {
-      if(p.nsfw && !currentUser) return false;
-      return true;
+      // include author search
+      return (p.title||'').toLowerCase().includes(q) || (p.body||'').toLowerCase().includes(q) || (p.tags||[]).join(' ').toLowerCase().includes(q) || (p.authorName||'').toLowerCase().includes(q);
     });
 
     galleryEl.innerHTML = '';
-    if(!visible.length){ emptyEl.style.display='block'; galleryEl.style.display='none'; return; }
+    if(!items.length){ emptyEl.style.display='block'; galleryEl.style.display='none'; return; }
     emptyEl.style.display='none'; galleryEl.style.display='grid';
     galleryEl.className = 'gallery ' + gridClass;
 
-    visible.forEach(p=>{
-      const card = document.createElement('div'); card.className='card';
-      const wrap = document.createElement('div'); wrap.className='thumb-wrap';
-      const img = document.createElement('img'); img.className='thumb'; img.alt = p.title || '이미지';
-      if(p.thumbBlobs && p.thumbBlobs.length) {
-        img.src = makeURL(p.thumbBlobs[0]);
-      } else {
-        img.src = 'data:image/svg+xml;utf8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400"><rect width="100%" height="100%" fill="#f6f7fb"/></svg>');
-      }
-      wrap.appendChild(img);
-      card.appendChild(wrap);
-
-      if(p.nsfw) { const nb = document.createElement('div'); nb.className='nsfw-badge'; nb.textContent='NSFW'; card.appendChild(nb); }
-
-      const hover = document.createElement('div'); hover.className='hover';
-      const author = p.authorName ? escapeHtml(p.authorName) : (p.anon ? '익명' : '비회원');
-      hover.innerHTML = `<div class="title">${p.title?escapeHtml(p.title):'(제목없음)'}</div><div class="meta">${(p.tags||[]).slice(0,3).join(' · ')} · ${author} · ${new Date(p.created_at).toLocaleString()}</div>`;
-      card.appendChild(hover);
-      card.addEventListener('click', ()=> openPost(p.id));
-      galleryEl.appendChild(card);
-    });
-  }catch(err){
-    console.error('renderGallery error', err);
-    toast('갤러리 로드 오류(콘솔 확인)');
-  }
+    if(viewMode === 'board'){
+      // render as list with titles (board)
+      items.forEach(p=>{
+        const li = document.createElement('div'); li.className='list-item';
+        if(p.thumbBlobs && p.thumbBlobs.length){
+          const img = document.createElement('img'); img.className='thumb-small'; img.src = makeURL(p.thumbBlobs[0]); li.appendChild(img);
+        }
+        const center = document.createElement('div'); center.style.flex='1';
+        const title = document.createElement('div'); title.className='list-title'; title.textContent = p.title || '(제목없음)';
+        const meta = document.createElement('div'); meta.className='small'; meta.textContent = `${p.authorName || (p.anon?'익명':'비회원')} · ${new Date(p.created_at).toLocaleString()}`;
+        center.appendChild(title); center.appendChild(meta);
+        li.appendChild(center);
+        li.addEventListener('click', ()=> openPost(p.id));
+        galleryEl.appendChild(li);
+      });
+    } else {
+      // photos grid
+      items.forEach(p=>{
+        const card = document.createElement('div'); card.className='card';
+        const wrap = document.createElement('div'); wrap.className='thumb-wrap';
+        const img = document.createElement('img'); img.className='thumb'; img.alt = p.title || '이미지';
+        if(p.thumbBlobs && p.thumbBlobs.length) img.src = makeURL(p.thumbBlobs[0]);
+        else img.src = 'data:image/svg+xml;utf8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400"><rect width="100%" height="100%" fill="#f6f7fb"/></svg>');
+        wrap.appendChild(img); card.appendChild(wrap);
+        if(p.nsfw) { const nb = document.createElement('div'); nb.className='nsfw-badge'; nb.textContent='NSFW'; card.appendChild(nb); }
+        const hover = document.createElement('div'); hover.className='hover';
+        const author = p.authorName ? escapeHtml(p.authorName) : (p.anon ? '익명' : '비회원');
+        hover.innerHTML = `<div class="title">${p.title?escapeHtml(p.title):'(제목없음)'}</div><div class="meta">${(p.tags||[]).slice(0,3).join(' · ')} · ${author} · ${new Date(p.created_at).toLocaleString()}</div>`;
+        card.appendChild(hover);
+        card.addEventListener('click', ()=> openPost(p.id));
+        galleryEl.appendChild(card);
+      });
+    }
+  }catch(e){ console.error('renderGallery error', e); toast('갤러리 로드 실패'); }
 }
 
-// ---- open post (with nsfw check) ----
+/* --- open post; set window.currentOpenPostId for bulk download --- */
 async function openPost(id){
   try{
-    const post = await dbGet(id);
-    if(!post){ toast('게시물을 찾을 수 없습니다.'); return; }
-    // nsfw: block for not-logged-in
-    if(post.nsfw && !currentUser){
-      alert('이 게시물은 성인/민감 콘텐츠로 비회원은 볼 수 없습니다. 로그인하세요.');
-      return;
-    }
-    // show
+    const p = await dbGet(id);
+    if(!p){ toast('게시물을 찾을 수 없습니다'); return; }
+    if(p.nsfw && !currentUser){ alert('NSFW 게시물은 비회원이 볼 수 없습니다. 로그인하세요.'); return; }
+    // show post view, set global id
+    window.currentOpenPostId = id;
     document.getElementById('gallery').style.display='none';
     postView.style.display='block';
-    postTitleView.textContent = post.title || '(제목없음)';
-    metaView.textContent = `${new Date(post.created_at).toLocaleString()} · ${post.category||''} · ${post.authorName || (post.anon ? '익명' : '비회원')}`;
-
+    postTitleView.textContent = p.title || '(제목없음)';
+    metaView.textContent = `${new Date(p.created_at).toLocaleString()} · ${p.category||''} · ${p.authorName || (p.anon ? '익명' : '비회원')}`;
     imageStack.innerHTML=''; carouselThumbs.innerHTML=''; carouselThumbs.style.display='none';
-    if(post.mainBlobs && post.mainBlobs.length){
-      post.mainBlobs.forEach((b,idx)=>{
+    if(p.mainBlobs && p.mainBlobs.length){
+      p.mainBlobs.forEach((b,idx)=>{
         const wrap = document.createElement('div'); wrap.style.position='relative';
         const img = document.createElement('img'); img.src = makeURL(b); img.style.width='100%'; img.style.height='auto';
         wrap.appendChild(img);
-        if(post.nsfw){ const ov = document.createElement('div'); ov.className='nsfw-overlay'; ov.textContent='NSFW — 민감한 콘텐츠'; wrap.appendChild(ov); }
+        if(p.nsfw) { const ov=document.createElement('div'); ov.className='nsfw-overlay'; ov.textContent='NSFW — 민감한 콘텐츠'; wrap.appendChild(ov); }
         imageStack.appendChild(wrap);
-        const t = document.createElement('img'); t.src = makeURL((post.thumbBlobs && post.thumbBlobs[idx]) ? post.thumbBlobs[idx] : b);
+        const t = document.createElement('img'); t.src = makeURL((p.thumbBlobs && p.thumbBlobs[idx]) ? p.thumbBlobs[idx] : b);
         t.addEventListener('click', ()=> { img.scrollIntoView({behavior:'smooth', block:'center'}); });
         carouselThumbs.appendChild(t);
       });
       if(carouselThumbs.children.length) carouselThumbs.style.display='flex';
     }
-    postBodyEl.textContent = post.body || '';
-    postTagsEl.innerHTML=''; (post.tags||[]).forEach(t=>{ const sp = document.createElement('span'); sp.className='tag'; sp.textContent=t; postTagsEl.appendChild(sp); });
-    downloadLink.href = (post.mainBlobs && post.mainBlobs[0]) ? makeURL(post.mainBlobs[0]) : '#';
-    downloadLink.download = (post.title?post.title.replace(/\s+/g,'_'):'image') + '.jpg';
-  }catch(err){ console.error('openPost error', err); toast('게시물 열기 실패'); }
+    postBodyEl.textContent = p.body || '';
+    postTagsEl.innerHTML=''; (p.tags||[]).forEach(t=>{ const s=document.createElement('span'); s.className='tag'; s.textContent=t; postTagsEl.appendChild(s); });
+    downloadLink.href = (p.mainBlobs && p.mainBlobs[0]) ? makeURL(p.mainBlobs[0]) : '#';
+    downloadLink.download = (p.title?p.title.replace(/\s+/g,'_'):'image') + '.jpg';
+  }catch(e){ console.error('openPost error', e); toast('게시물 열기 실패'); }
 }
 
-// ---- editor actions ----
+/* --- close post and return to gallery; clear open id and revoke object URLs --- */
+btnBack.addEventListener('click', ()=> {
+  window.currentOpenPostId = null;
+  postView.style.display='none';
+  document.getElementById('gallery').style.display='grid';
+  revokeAllURLs();
+});
+
+/* --- editor save --- */
 filesInput.addEventListener('change', ()=>{
   const files = Array.from(filesInput.files || []);
   if(!files.length){ selectedNames.textContent='선택된 파일 없음'; previewEl.innerHTML=''; return; }
   selectedNames.textContent = files.map(f=>f.name).join(', ').slice(0,200);
-  previewEl.innerHTML=''; files.slice(0,MAX_FILES).forEach(f=>{
-    const url = URL.createObjectURL(f);
-    const im = document.createElement('img'); im.src = url; previewEl.appendChild(im); _urls.push(url);
-  });
+  previewEl.innerHTML=''; files.slice(0,MAX_FILES).forEach(f=>{ const url=URL.createObjectURL(f); const img=document.createElement('img'); img.src=url; previewEl.appendChild(img); _urls.push(url); });
 });
 
-btnNew.addEventListener('click', ()=> {
-  editorModal.style.display='flex';
-});
+btnNew.addEventListener('click', ()=> { editorModal.style.display='flex'; });
 editorClose.addEventListener('click', ()=> { editorModal.style.display='none'; });
 
 btnSave.addEventListener('click', ()=> editorSave(false));
@@ -575,13 +543,12 @@ btnSaveClose.addEventListener('click', ()=> editorSave(true));
 
 async function editorSave(closeAfter){
   if(!currentUser){
-    // anonymous allowed; require deletion password
-    if(!anonPasswordInput.value || String(anonPasswordInput.value).trim().length < 4){ toast('익명 업로드 시 삭제 비밀번호(최소4자)를 입력하세요'); return; }
+    if(!anonPasswordInput.value || String(anonPasswordInput.value).trim().length < 4){ toast('익명 업로드 시 삭제 비밀번호 필요 (최소4자)'); return; }
   }
-  editorProgress.textContent = '이미지 처리 중...';
+  editorProgress.textContent='이미지 처리 중...';
   try{
-    const files = Array.from(filesInput.files || []).slice(0, MAX_FILES);
-    const mainBlobs = []; const thumbBlobs = [];
+    const files = Array.from(filesInput.files || []).slice(0,MAX_FILES);
+    const mainBlobs=[]; const thumbBlobs=[];
     for(const f of files){
       if(!f.type.startsWith('image/')) continue;
       const img = await readFileAsImage(f);
@@ -591,31 +558,25 @@ async function editorSave(closeAfter){
     const id = 'p_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8);
     const post = { id, created_at: new Date().toISOString(), title: titleInput.value.trim(), body: bodyInput.value.trim(), tags: (tagsInput.value||'').split(',').map(s=>s.trim()).filter(Boolean), category: categoryInput.value || 'photos', mainBlobs, thumbBlobs, anon: !currentUser, authorId: currentUser ? currentUser.id : null, authorName: currentUser ? currentUser.username : null, anonPassHash: currentUser ? null : await hashPassword(String(anonPasswordInput.value||'')), nsfw: !!nsfwCheck.checked };
     await dbPut(post, STORE);
-    editorProgress.textContent=''; editorModal.style.display='none';
-    toast('업로드 완료');
+    editorProgress.textContent=''; editorModal.style.display='none'; toast('업로드 완료');
     await renderGallery();
     if(closeAfter) openPost(post.id);
-  }catch(err){ console.error('editorSave error', err); editorProgress.textContent=''; toast('업로드 실패'); }
+  }catch(e){ console.error('editorSave error', e); editorProgress.textContent=''; toast('업로드 실패'); }
 }
 
-// ---- auth/user management ----
+/* --- auth: create, login, persistence (localStorage) --- */
 async function getUserByUsername(username){
-  const db = await openDB();
-  return new Promise((res,rej)=>{
-    try{
-      const tx = db.transaction(USER_STORE,'readonly');
-      const idx = tx.objectStore(USER_STORE).index('username');
-      const rq = idx.get(username);
-      rq.onsuccess = ()=> res(rq.result || null);
-      rq.onerror = ()=> res(null);
-    }catch(e){ res(null); }
-  });
+  try{
+    const db=await openDB();
+    return await new Promise((res,rej)=>{ const tx=db.transaction(USER_STORE,'readonly'); const idx=tx.objectStore(USER_STORE).index('username'); const rq=idx.get(username); rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>res(null); });
+  }catch(e){ return null; }
 }
-async function createUser(username, password){
-  username = String(username||'').trim();
-  if(!username || !password) throw new Error('아이디/비밀번호 필요');
+
+async function createUser(username,password){
+  username=String(username||'').trim();
+  if(!username||!password) throw new Error('아이디/비밀번호 필요');
   if(!/^[a-zA-Z0-9._-]{3,}$/.test(username)) throw new Error('아이디는 3자 이상 영숫자/._- 만 허용');
-  if(password.length < 4) throw new Error('비밀번호는 4자 이상');
+  if(password.length<4) throw new Error('비밀번호는 4자 이상');
   const existing = await getUserByUsername(username);
   if(existing) throw new Error('이미 존재하는 아이디입니다');
   const users = await dbGetAll(USER_STORE);
@@ -628,11 +589,14 @@ async function createUser(username, password){
   }
   const id = 'u_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8);
   const pHash = await hashPassword(password);
-  const user = { id, username, passwordHash: pHash, role, profile:{displayName: username, bio:'', avatar:null}, created_at: new Date().toISOString(), resetTokenHash: null };
+  const user = { id, username, passwordHash: pHash, role, profile: { displayName: username, bio:'', avatar:null }, created_at: new Date().toISOString(), resetTokenHash: null };
   await dbPut(user, USER_STORE);
+  // persist login automatically (user wants to stay logged in across sessions)
+  setCurrentUser({ id: user.id, username: user.username, role: user.role });
   return user;
 }
-async function authenticateUser(username, password){
+
+async function authenticateUser(username,password){
   const u = await getUserByUsername(username);
   if(!u) return null;
   const ph = await hashPassword(password);
@@ -640,47 +604,66 @@ async function authenticateUser(username, password){
   return null;
 }
 
-// login/register UI
-loginBtn.addEventListener('click', ()=> { authMsg.textContent=''; authUsername.value=''; authPassword.value=''; loginBackdrop.style.display='flex'; });
-registerBtn.addEventListener('click', ()=> { authMsg.textContent=''; authUsername.value=''; authPassword.value=''; loginBackdrop.style.display='flex'; });
+/* --- login UI actions; allow Enter to submit --- */
+loginBtn.addEventListener('click', ()=> { authMsg.textContent=''; authUsername.value=''; authPassword.value=''; loginBackdrop.style.display='flex'; authUsername.focus(); });
+registerBtn.addEventListener('click', ()=> { authMsg.textContent=''; authUsername.value=''; authPassword.value=''; loginBackdrop.style.display='flex'; authUsername.focus(); });
 
-qs('#doRegister').addEventListener('click', async ()=>{
+doRegisterBtn && doRegisterBtn.addEventListener('click', async ()=>{
   const username = String(authUsername.value||'').trim();
   const password = String(authPassword.value||'');
   try{
-    if(username.length < 3 || password.length < 4){ authMsg.textContent='아이디 3자/비밀번호 4자 이상 필요'; return; }
-    const user = await createUser(username, password);
-    setCurrentUser({ id: user.id, username: user.username, role: user.role });
+    if(username.length<3||password.length<4){ authMsg.textContent='아이디 3자/비밀번호 4자 이상 필요'; return; }
+    await createUser(username,password);
     loginBackdrop.style.display='none';
-    toast('회원가입 및 로그인 완료 ('+user.role+')');
-  }catch(err){ console.error('register error', err); authMsg.textContent = String(err.message || '회원가입 실패'); }
+    authMsg.textContent='';
+    toast('회원가입 및 로그인 완료');
+    await renderGallery();
+  }catch(e){ console.error('register error', e); authMsg.textContent = e.message || '회원가입 실패'; }
 });
-
-qs('#doLogin').addEventListener('click', async ()=>{
+doLoginBtn && doLoginBtn.addEventListener('click', async ()=>{
   const username = String(authUsername.value||'').trim();
   const password = String(authPassword.value||'');
   try{
-    const u = await authenticateUser(username, password);
+    const u = await authenticateUser(username,password);
     if(!u){ authMsg.textContent='아이디 또는 비밀번호 불일치'; return; }
     setCurrentUser(u);
     loginBackdrop.style.display='none';
+    authMsg.textContent='';
     toast('로그인 완료');
-  }catch(err){ console.error('login error', err); authMsg.textContent='로그인 실패'; }
+    await renderGallery();
+  }catch(e){ console.error('login error', e); authMsg.textContent='로그인 실패'; }
+});
+// Enter key triggers login when focus in username/password
+[authUsername, authPassword].forEach(el=>{
+  el && el.addEventListener('keydown', async (ev)=>{
+    if(ev.key === 'Enter'){
+      ev.preventDefault();
+      // prefer login button action
+      if(doLoginBtn) doLoginBtn.click();
+    }
+  });
 });
 
-// logout
+/* --- logout --- */
 logoutBtn.addEventListener('click', ()=> {
-  if(!confirm('로그아웃 하시겠습니까?')) return;
+  if(!confirm('로그아웃하시겠습니까?')) return;
   setCurrentUser(null);
-  saveSessionUser(null);
+  saveCurrentUser(null);
   toast('로그아웃되었습니다');
 });
 
-// ---- settings (admin only) ----
-settingsBtn.addEventListener('click', ()=> {
-  // only admin can open
+/* --- my posts filter --- */
+myPostsBtn.addEventListener('click', async ()=>{
+  if(!currentUser){ toast('로그인 후 사용하세요'); return; }
+  showOnlyMyPosts = !showOnlyMyPosts;
+  myPostsBtn.textContent = showOnlyMyPosts ? '내 게시글(ON)' : '내 게시글';
+  await renderGallery();
+});
+
+/* --- settings --- */
+settingsBtn.addEventListener('click', ()=>{
   if(!currentUser || currentUser.role !== 'admin'){ toast('설정 접근 권한이 없습니다'); return; }
-  const owner = getSiteOwner(); siteOwnerInput.value = owner;
+  siteOwnerInput.value = getSiteOwner();
   settingsBackdrop.style.display='flex';
 });
 btnSaveSettings.addEventListener('click', ()=> {
@@ -692,10 +675,12 @@ btnSaveSettings.addEventListener('click', ()=> {
 });
 settingsClose.addEventListener('click', ()=> settingsBackdrop.style.display='none');
 
-// ---- utilities: export/import/clear ----
-qs('#btnRefresh').addEventListener('click', async ()=> { await renderGallery(); toast('새로고침'); });
+/* --- more menu toggle --- */
+moreBtn.addEventListener('click', ()=> { moreMenu.style.display = moreMenu.style.display === 'block' ? 'none' : 'block'; });
+document.addEventListener('click', (e)=>{ if(!moreBtn.contains(e.target) && !moreMenu.contains(e.target)) moreMenu.style.display='none'; });
 
-qs('#btnExport').addEventListener('click', async ()=>{
+/* --- export/import --- */
+btnExport.addEventListener('click', async ()=>{
   try{
     const posts = await dbGetAll(STORE);
     const out = [];
@@ -709,9 +694,8 @@ qs('#btnExport').addEventListener('click', async ()=>{
     toast('내보내기 완료');
   }catch(e){ console.error('export error', e); toast('내보내기 실패'); }
 });
-
 importFile.addEventListener('change', async e=>{
-  const f = e.target.files[0]; if(!f) return;
+  const f=e.target.files[0]; if(!f) return;
   try{
     const txt = await f.text(); const arr = JSON.parse(txt);
     for(const item of arr){
@@ -724,20 +708,15 @@ importFile.addEventListener('change', async e=>{
   }catch(err){ console.error('import error', err); toast('가져오기 오류'); } finally { importFile.value=''; }
 });
 
-btnClear.addEventListener('click', async ()=> { if(!confirm('정말 모든 게시물을 삭제합니까?')) return; await dbClear(STORE); revokeAllURLs(); toast('모두 삭제됨'); await renderGallery(); });
-
-// ---- bulk download ----
+/* --- bulk download --- */
 if(bulkDownloadBtn){
   bulkDownloadBtn.addEventListener('click', async ()=>{
-    if(!window.JSZip){ alert('JSZip 로드 실패'); return; }
-    // need current post opened
-    const title = postTitleView.textContent || 'post';
-    // get current open post via metaView info (we store last opened id)
-    // For simplicity, require that user clicks bulkDownload from within a post (currentPostId stored)
-    if(!window.currentOpenPostId){ alert('게시물을 열고 시도하세요'); return; }
+    const pid = window.currentOpenPostId;
+    if(!pid){ alert('게시물을 열고 시도하세요'); return; }
     try{
-      const post = await dbGet(window.currentOpenPostId);
-      if(!post || !post.mainBlobs || post.mainBlobs.length===0){ alert('다운로드할 이미지가 없습니다.'); return; }
+      const post = await dbGet(pid);
+      if(!post || !post.mainBlobs || post.mainBlobs.length===0){ alert('이미지가 없습니다.'); return; }
+      if(typeof JSZip === 'undefined'){ alert('JSZip 로드 실패'); return; }
       const zip = new JSZip();
       for(let i=0;i<post.mainBlobs.length;i++){
         const arr = await post.mainBlobs[i].arrayBuffer();
@@ -750,32 +729,42 @@ if(bulkDownloadBtn){
   });
 }
 
-// ---- grid / view toggles ----
-gridLargeBtn.addEventListener('click', ()=> { gridClass = 'grid-large'; applyGridClass(); renderGallery(); });
-gridMediumBtn.addEventListener('click', ()=> { gridClass = 'grid-medium'; applyGridClass(); renderGallery(); });
-gridCompactBtn.addEventListener('click', ()=> { gridClass = 'grid-compact'; applyGridClass(); renderGallery(); });
+/* --- grid / view toggles --- */
+gridLargeBtn.addEventListener('click', ()=> { gridClass='grid-large'; applyGridClass(); renderGallery(); });
+gridMediumBtn.addEventListener('click', ()=> { gridClass='grid-medium'; applyGridClass(); renderGallery(); });
+gridCompactBtn.addEventListener('click', ()=> { gridClass='grid-compact'; applyGridClass(); renderGallery(); });
 function applyGridClass(){ galleryEl.className = 'gallery ' + gridClass; }
 
 viewPhotosBtn.addEventListener('click', ()=> { viewMode='photos'; applyViewMode(); renderGallery(); });
 viewBoardBtn.addEventListener('click', ()=> { viewMode='board'; applyViewMode(); renderGallery(); });
-function applyViewMode(){ currentViewLabel.textContent = viewMode === 'photos' ? '사진형' : '게시판형'; viewPhotosBtn.classList.toggle('primary', viewMode==='photos'); viewBoardBtn.classList.toggle('primary', viewMode==='board'); }
+function applyViewMode(){ currentViewLabel.textContent = viewMode==='photos' ? '사진형' : '게시판형'; viewPhotosBtn.classList.toggle('primary', viewMode==='photos'); viewBoardBtn.classList.toggle('primary', viewMode==='board'); }
 
-// ---- simple helpers for base64 <-> blob ----
-function blobToBase64(blob){ return new Promise(res=>{ const fr = new FileReader(); fr.onload = ()=> res(fr.result.split(',')[1]); fr.readAsDataURL(blob); }); }
-function base64ToBlob(b64, mime='image/jpeg'){ const bin = atob(b64); const len = bin.length; const arr = new Uint8Array(len); for(let i=0;i<len;i++) arr[i]=bin.charCodeAt(i); return new Blob([arr], { type: mime }); }
-
-// ---- misc helpers ----
-function updateNewButtonState(){ if(settings.requireMember && !currentUser){ btnNew.disabled=true; btnNew.title='회원 전용'; } else { btnNew.disabled=false; btnNew.title=''; } }
-
-// ---- event bindings for search/sort/filter ----
+/* --- search/sort/filter hooks --- */
 searchInput.addEventListener('input', ()=> renderGallery());
 sortSelect.addEventListener('change', ()=> renderGallery());
 filterSelect.addEventListener('change', ()=> renderGallery());
 
-// ---- expose globals needed by some handlers ----
-window.currentOpenPostId = null;
+/* --- misc helpers --- */
+function blobToBase64(blob){ return new Promise(res=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result.split(',')[1]); fr.readAsDataURL(blob); }); }
+function base64ToBlob(b64,mime='image/jpeg'){ const bin=atob(b64); const len=bin.length; const arr=new Uint8Array(len); for(let i=0;i<len;i++) arr[i]=bin.charCodeAt(i); return new Blob([arr],{type:mime}); }
 
-// ---- end ----
+/* --- ensure clicking outside of mobile menu closes it --- */
+document.addEventListener('click', e=>{
+  const toolsEl = tools;
+  if(!toolsEl.contains(e.target)){
+    tools.classList.remove('open');
+  }
+});
+
+/* --- prevent horizontal overflow on mobile by closing menus when tapping anywhere --- */
+document.addEventListener('touchstart', ()=> { tools.classList.remove('open'); moreMenu.style.display='none'; });
+
+/* --- updateNewButtonState (if requireMember feature is re-added in future) --- */
+function updateNewButtonState(){ /* placeholder for future member-only-mode */ }
+
+/* --- revoke URLs on unload --- */
+window.addEventListener('beforeunload', ()=> revokeAllURLs());
+
 </script>
 </body>
 </html>
